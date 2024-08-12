@@ -1,7 +1,7 @@
 [
     {
         "id": 1,
-        "nombre": "Gorra clásica",
+        "nombre": "Gorra clásicaa",
         "precio": 19.99,
         "imagen": "./src/assets/img/prueba01.png",
         "descripcion": "Gorra clásica de algodón con ajuste trasero.",
