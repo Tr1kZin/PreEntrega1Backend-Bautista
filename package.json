@@ -11,7 +11,11 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "express-handlebars": "^7.1.3",
+    "fs": "^0.0.1-security",
+    "readme-md-generator": "^1.0.0",
+    "socket.io": "^4.7.5",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
