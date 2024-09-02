@@ -1,109 +1,147 @@
-import { Router } from "express";
-import { productManager } from "../app.js";
-import { promises as fs } from "fs";
-import { v4 as uuidv4 } from 'uuid';
+import express from 'express';
+import CartManager from '../dao/db/cart-manager-db.js'; // Ajusta la ruta según tu estructura
+import ProductManager from '../dao/db/product-manager-db.js'; // Ajusta la ruta según tu estructura
 
-const productsRouter = Router();
+const router = express.Router();
+const cartManager = new CartManager(); // Instancia de CartManager
+const productManager = new ProductManager(); // Instancia de ProductManager
 
-productsRouter.get("/", async (req, res) => {
+// Endpoint para obtener productos con paginación, orden y filtrado
+router.get('/', async (req, res) => {
     try {
-        const { limit } = req.query;
-        const products = await productManager.getProducts();
+        const { limit = 10, page = 1, sort = 'asc', query = '' } = req.query;
 
-        if (limit) {
-            const limitedProducts = products.slice(0, limit);
-            return res.json(limitedProducts);
-        } else {
-            return res.json(products);
-        }
+        const products = await productManager.getProducts({
+            limit: parseInt(limit),
+            page: parseInt(page),
+            sort,
+            query,
+        });
+
+        res.json({
+            status: 'success',
+            payload: products.docs,
+            totalPages: products.totalPages,
+            prevPage: products.prevPage,
+            nextPage: products.nextPage,
+            page: products.page,
+            hasPrevPage: products.hasPrevPage,
+            hasNextPage: products.hasNextPage,
+            prevLink: products.prevLink,
+            nextLink: products.nextLink,
+        });
+
     } catch (error) {
-        console.log(error);
-        res.status(500).send("Error al intentar recibir los productos");
+        console.error("Error getting products", error);
+        res.status(500).json({
+            status: 'error',
+            error: "Internal server error"
+        });
     }
 });
 
-productsRouter.get("/:pid", async (req, res) => {
+// Endpoint para obtener un producto específico por ID
+router.get('/:pid', async (req, res) => {
+    const id = req.params.pid;
+
     try {
-        const { pid } = req.params;
-        const product = await productManager.getProductById(pid);
+        const product = await productManager.getProductById(id);
+        if (!product) {
+            return res.json({
+                error: "Product not found"
+            });
+        }
+
         res.json(product);
     } catch (error) {
-        console.log(error);
-        res.status(500).send(`Error al intentar recibir el producto con el id: ${pid}`);
+        console.error("Error getting product", error);
+        res.status(500).json({
+            error: "Internal server error"
+        });
     }
 });
 
-productsRouter.post("/", async (req, res) => {
+// Endpoint para agregar un producto
+router.post('/', async (req, res) => {
+    const newProduct = req.body;
+
     try {
-        const { nombre, precio, descripcion, categoria } = req.body;
-        if (!nombre || !precio || !descripcion || !categoria) {
-            return res.status(400).send("Faltan datos en la solicitud");
+        await productManager.addProduct(newProduct);
+        res.status(201).json({
+            message: "Product added successfully"
+        });
+    } catch (error) {
+        console.error("Error adding product", error);
+        res.status(500).json({
+            error: "Internal server error"
+        });
+    }
+});
+
+// Endpoint para actualizar un producto por ID
+router.put('/:pid', async (req, res) => {
+    const id = req.params.pid;
+    const updatedProduct = req.body;
+
+    try {
+        await productManager.updateProduct(id, updatedProduct);
+        res.json({
+            message: "Product updated successfully"
+        });
+    } catch (error) {
+        console.error("Error updating product", error);
+        res.status(500).json({
+            error: "Internal server error"
+        });
+    }
+});
+
+// Endpoint para eliminar un producto por ID
+router.delete('/:pid', async (req, res) => {
+    const id = req.params.pid;
+
+    try {
+        await productManager.deleteProduct(id);
+        res.json({
+            message: "Product deleted successfully"
+        });
+    } catch (error) {
+        console.error("Error deleting product", error);
+        res.status(500).json({
+            error: "Internal server error"
+        });
+    }
+});
+
+// Endpoint para agregar un producto al carrito
+router.post('/addProduct', async (req, res) => {
+    const { productId, cartId } = req.body;
+    
+    if (!productId || !cartId) {
+        return res.status(400).json({ error: 'Product ID and Cart ID are required' });
+    }
+
+    try {
+        // Verificar si el carrito existe
+        const cart = await cartManager.getCartById(cartId);
+        if (!cart) {
+            return res.status(404).json({ error: 'Cart not found' });
         }
 
-        const newProduct = {
-            nombre,
-            precio,
-            descripcion,
-            categoria,
-            imagen: "/img/carpiLoco.gif" // Imagen por defecto solo al agregar manualmente
-        };
-
-        const response = await productManager.addProduct(newProduct);
-        res.status(201).json(response);
-    } catch (error) {
-        console.log(error);
-        res.status(500).send("Error al intentar agregar producto");
-    }
-});
-
-productsRouter.put("/:pid", async (req, res) => {
-    const { pid } = req.params;
-    try {
-        const { nombre, descripcion, precio, categoria } = req.body;
-        if (!nombre || !descripcion || !precio || !categoria) {
-            return res.status(400).send("Faltan datos en la solicitud");
+        // Verificar si el producto existe
+        const product = await productManager.getProductById(productId);
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
         }
 
-        const response = await productManager.updateProduct(pid, { nombre, descripcion, precio, categoria });
-        res.json(response);
+        // Agregar producto al carrito
+        await cartManager.addProductToCart(cartId, productId);
+
+        res.status(200).json({ message: 'Product added to cart' });
     } catch (error) {
-        console.log(error);
-        res.status(500).send(`Error al intentar editar producto con id ${pid}`);
+        console.error('Error adding product to cart:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-productsRouter.delete("/:pid", async (req, res) => {
-    const { pid } = req.params;
-    try {
-        await productManager.deleteProduct(pid);
-        res.send("Product Deleted");
-    } catch (error) {
-        console.log(error);
-        res.status(500).send(`Error al intentar eliminar el producto con id: ${pid}`);
-    }
-});
-
-// Nueva ruta para importar productos desde stock.json
-productsRouter.post("/import-stock", async (req, res) => {
-    try {
-        const stockData = await fs.readFile('./src/data/stock.json', 'utf8');
-        const stockProducts = JSON.parse(stockData);
-
-        for (const product of stockProducts) {
-            // Solo asignar un ID si no está presente en stock.json
-            if (!product.id) {
-                product.id = uuidv4();
-            }
-            // No asignar una imagen por defecto si ya hay una imagen
-            await productManager.addProduct(product);
-        }
-
-        const products = await productManager.getProducts();
-        res.status(200).json(products);
-    } catch (error) {
-        console.log(error);
-        res.status(500).send("Error al intentar importar el stock");
-    }
-});
-
-export { productsRouter };
+export default router;
